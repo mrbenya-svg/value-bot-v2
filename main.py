@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def health_check():
-    return "Value Filter Bot is alive!", 200
+    return "Value Filter Bot 2 is alive!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -25,7 +25,7 @@ threading.Thread(target=run_flask, daemon=True).start()
 
 def keep_alive():
     """Фоновий ping через зовнішнє посилання Render для запобігання 'засинанню'"""
-    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot.onrender.com")
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-v2.onrender.com")
     
     time.sleep(15) 
     
@@ -78,14 +78,14 @@ LEAGUES_MAP = {
     "soccer_spain_segunda_division": "Іспанія: Сегунда",
     "soccer_germany_bundesliga2": "Німеччина: Друга Бундесліга",
 
-    # --- Нові додані турніри (30) ---
+    # --- Додаткові турніри (30) ---
     "soccer_algeria_ligue_1": "Алжир: Дивізіон 1",
     "soccer_argentina_primera_division": "Аргентина: Прімера",
     "soccer_argentina_primera_b": "Аргентина: Прімера Б Насьональ",
     "soccer_brazil_campeonato": "Бразилія: Серія А",
     "soccer_brazil_serie_b": "Бразилія: Серія Б",
     "soccer_paraguay_primera_division": "Парагвай: Прімера",
-    "soccer_paraguay_division_intermedia": "Парагвай: Дивізіон Інтермедіа", # Додано 30-ту лігу
+    "soccer_paraguay_division_intermedia": "Парагвай: Дивізіон Інтермедіа",
     "soccer_colombia_categoria_primera_a": "Колумбія: Прімера А",
     "soccer_colombia_categoria_primera_b": "Колумбія: Прімера Б",
     "soccer_chile_camp_nacional": "Чилі: Прімера",
@@ -159,10 +159,10 @@ def format_match_time(iso_time_str: str) -> str:
         return "Час невідомий"
 
 # ================================
-# 3. СКАНУВАННЯ З ФІЛЬТРАЦІЄЮ СТРАТЕГІЙ
+# 3. СКАНУВАННЯ З ГРУПУВАННЯМ СТРАТЕГІЙ
 # ================================
 def run_scan_and_notify(chat_id):
-    bot.send_message(chat_id, f"🔎 <b>Запуск сканера (Бот 2: {len(LEAGUES_MAP)} турнірів + 2 стратегії)...</b>", parse_mode="HTML")
+    bot.send_message(chat_id, f"🔎 <b>Запуск сканера ({len(LEAGUES_MAP)} турнірів)...</b>", parse_mode="HTML")
     
     valuable_matches = []
     now_utc = datetime.now(timezone.utc)
@@ -204,7 +204,7 @@ def run_scan_and_notify(chat_id):
                 try:
                     match_dt = datetime.fromisoformat(commence_str.replace("Z", "+00:00"))
                     
-                    # Пропускаємо матчі, які вже розпочалися або за розкладом далі ніж за 24 години
+                    # Жорсткий фільтр часу: ігноруємо матчі в лайві або ті, що стартують > 24 год
                     if match_dt <= now_utc or match_dt - now_utc > timedelta(hours=MAX_HOURS_AHEAD):
                         continue
                 except Exception:
@@ -251,61 +251,59 @@ def run_scan_and_notify(chat_id):
 
             model = calculate_full_poisson_model(avg_h, avg_d, avg_a)
 
-            # --- ПЕРЕВІРКА СТРАТЕГІЙ ---
+            # --- ГРУПУВАННЯ СТРАТЕГІЙ ДЛЯ ГОСПОДАРІВ (П1) ---
+            matched_strategies_p1 = []
+            ev_p1 = 0.0
 
-            # 1. Стратегія Pre-match Home (П1, коефіцієнт >= 1.60)
             if MIN_ODDS <= max_h_odds <= MAX_ODDS:
                 ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
                 if ev_p1 >= MIN_EV:
-                    msg = (
-                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                        f"📜 <b>Стратегія:</b> Pre-match Home\n"
-                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                        f"📅 <b>Час:</b> {match_time_formatted}\n"
-                        f"🏆 <b>Ліга:</b> {league_title}\n"
-                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
-                        f"📌 <b>Ставка:</b> {home_team} (П1)\n"
-                        f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
-                        f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
-                        f"🔥 <b>EV:</b> +{ev_p1}%"
-                    )
-                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+                    # Стратегія 1: Pre-match Home (П1, кф від 1.60)
+                    matched_strategies_p1.append("Pre-match Home")
+                    # Стратегія 2: Pre-match 2.0+ (П1, кф від 2.00)
+                    if max_h_odds >= 2.00:
+                        matched_strategies_p1.append("Pre-match 2.0+")
 
-            # 2. Стратегія Pre-match 2.0+ (П1 або П2, коефіцієнт >= 2.00)
-            if max_h_odds >= 2.00 and max_h_odds <= MAX_ODDS:
-                ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
-                if ev_p1 >= MIN_EV:
-                    # Перевіряємо, щоб не дублювати сповіщення, якщо матч пройшов за першою стратегією
-                    msg = (
-                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                        f"📜 <b>Стратегія:</b> Pre-match 2.0+\n"
-                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                        f"📅 <b>Час:</b> {match_time_formatted}\n"
-                        f"🏆 <b>Ліга:</b> {league_title}\n"
-                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
-                        f"📌 <b>Ставка:</b> {home_team} (П1)\n"
-                        f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
-                        f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
-                        f"🔥 <b>EV:</b> +{ev_p1}%"
-                    )
-                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+            if matched_strategies_p1:
+                strat_str = ", ".join(matched_strategies_p1)
+                msg = (
+                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                    f"📜 <b>Стратегії:</b> {strat_str}\n"
+                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                    f"📅 <b>Час:</b> {match_time_formatted}\n"
+                    f"🏆 <b>Ліга:</b> {league_title}\n"
+                    f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                    f"📌 <b>Ставка:</b> {home_team} (П1)\n"
+                    f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
+                    f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
+                    f"🔥 <b>EV:</b> +{ev_p1}%"
+                )
+                valuable_matches.append({'match_time': match_dt, 'msg': msg})
 
-            if max_a_odds >= 2.00 and max_a_odds <= MAX_ODDS:
+            # --- ГРУПУВАННЯ СТРАТЕГІЙ ДЛЯ ГОСТЕЙ (П2) ---
+            matched_strategies_p2 = []
+            ev_p2 = 0.0
+
+            if 2.00 <= max_a_odds <= MAX_ODDS:
                 ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2)
                 if ev_p2 >= MIN_EV:
-                    msg = (
-                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                        f"📜 <b>Стратегії:</b> Pre-match 2.0+\n"
-                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                        f"📅 <b>Час:</b> {match_time_formatted}\n"
-                        f"🏆 <b>Ліга:</b> {league_title}\n"
-                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
-                        f"📌 <b>Ставка:</b> {away_team} (П2)\n"
-                        f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
-                        f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
-                        f"🔥 <b>EV:</b> +{ev_p2}%"
-                    )
-                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+                    matched_strategies_p2.append("Pre-match 2.0+")
+
+            if matched_strategies_p2:
+                strat_str = ", ".join(matched_strategies_p2)
+                msg = (
+                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                    f"📜 <b>Стратегії:</b> {strat_str}\n"
+                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                    f"📅 <b>Час:</b> {match_time_formatted}\n"
+                    f"🏆 <b>Ліга:</b> {league_title}\n"
+                    f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                    f"📌 <b>Ставка:</b> {away_team} (П2)\n"
+                    f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
+                    f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
+                    f"🔥 <b>EV:</b> +{ev_p2}%"
+                )
+                valuable_matches.append({'match_time': match_dt, 'msg': msg})
 
     valuable_matches.sort(key=lambda item: item['match_time'])
 
@@ -313,7 +311,7 @@ def run_scan_and_notify(chat_id):
         bot.send_message(chat_id, val_item['msg'], parse_mode="HTML")
 
     if not valuable_matches:
-        bot.send_message(chat_id, "🏁 Завершено. Валуїв за обраними стратегіями не знайдено.")
+        bot.send_message(chat_id, "🏁 Завершено. Валуїв за обраними критеріями не знайдено.")
     else:
         bot.send_message(chat_id, f"✅ Завершено. Знайдено валуйних сигналів: {len(valuable_matches)}")
 
@@ -322,7 +320,7 @@ def run_scan_and_notify(chat_id):
 # ================================
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "Надішли 'скан' або /scan для запуску сканування за стратегіями.\nКоманда /quota покаже залишок ліміту API.")
+    bot.reply_to(message, "Надішли 'скан' або /scan для запуску сканування.\nКоманда /quota покаже залишок ліміту API.")
 
 @bot.message_handler(commands=['quota'])
 def check_quota(message):
