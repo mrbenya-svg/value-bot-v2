@@ -76,9 +76,6 @@ LEAGUES_MAP = {
     "soccer_netherlands_eerste_divisie": "Нідерланди: Еесте Дивізі"
 }
 
-# Примітка: При відсутності прямого ключа у безкоштовній сітці API для редких ліг 
-# (наприклад, Парагвай 2), задіюються доступні аналоги або фолбек-запити.
-
 # ================================
 # 2. МАТЕМАТИЧНА МОДЕЛЬ
 # ================================
@@ -128,23 +125,18 @@ def format_match_time(iso_time_str: str) -> str:
 
 def check_strategies(is_home: bool, max_odds: float, fair_odds: float, ev: float, xg_h: float, xg_a: float):
     """
-    Перевірка ставки на відповідність 3-м стратегіям:
-    1. Pre-match 2,0: max_odds >= 2.0; EV >= 10%
-    2. Pre-match 2,0+: max_odds >= 2.0; Fair Odds >= 2.0; EV >= 10%; |xG_h - xG_a| >= 0.3
-    3. Pre-match Home: EV >= 7% i EV < 15%; team == Home (is_home=True); (xg_h - xg_a) >= 1.0
+    Перевірка ставки на відповідність 2-м стратегіям:
+    1. Pre-match 2,0+: max_odds >= 2.0; Fair Odds >= 2.0; EV >= 10%; |xG_h - xG_a| >= 0.3
+    2. Pre-match Home: EV >= 7% i EV < 15%; team == Home (is_home=True); (xg_h - xg_a) >= 1.0
     """
     matched_strategies = []
     abs_xg_diff = abs(xg_h - xg_a)
 
-    # 1. Pre-match 2,0
-    if max_odds >= 2.0 and ev >= 10.0:
-        matched_strategies.append("Pre-match 2.0")
-
-    # 2. Pre-match 2,0+
+    # 1. Pre-match 2,0+
     if max_odds >= 2.0 and fair_odds >= 2.0 and ev >= 10.0 and abs_xg_diff >= 0.3:
         matched_strategies.append("Pre-match 2.0+")
 
-    # 3. Pre-match Home
+    # 2. Pre-match Home
     if is_home and (7.0 <= ev < 15.0) and ((xg_h - xg_a) >= 1.0):
         matched_strategies.append("Pre-match Home")
 
@@ -154,7 +146,7 @@ def check_strategies(is_home: bool, max_odds: float, fair_odds: float, ev: float
 # 3. СКАНУВАННЯ ТА ХРОНОЛОГІЧНЕ СОРТУВАННЯ
 # ================================
 def run_scan_and_notify(chat_id):
-    bot.send_message(chat_id, "🔎 <b>Запуск сканера (Новий бот: 17 турнірів + 3 стратегії)...</b>", parse_mode="HTML")
+    bot.send_message(chat_id, "🔎 <b>Запуск сканера (Новий бот: 17 турнірів + 2 стратегії)...</b>", parse_mode="HTML")
     
     valuable_matches = []
     now_utc = datetime.now(timezone.utc)
@@ -288,7 +280,7 @@ def run_scan_and_notify(chat_id):
         bot.send_message(chat_id, val_item['msg'], parse_mode="HTML")
 
     if not valuable_matches:
-        bot.send_message(chat_id, "🏁 Завершено. Валуїв за вашими 3-ма стратегіями на найближчі 24 години не знайдено.")
+        bot.send_message(chat_id, "🏁 Завершено. Валуїв за вашими 2-ма стратегіями на найближчі 24 години не знайдено.")
     else:
         bot.send_message(chat_id, f"✅ Завершено. Знайдено валуйних сигналів: {len(valuable_matches)}")
 
