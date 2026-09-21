@@ -51,31 +51,61 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 MAX_HOURS_AHEAD = 24
 
 LEAGUES_MAP = {
-    # Міжнародні та Кубки
-    "soccer_uefa_nations_league": "Ліга націй УЄФА",
-    "soccer_concacaf_nations_league": "Ліга націй КОНКАКАФ",
-    "soccer_africa_cup_of_nations": "Кубок африканських націй",
-    "soccer_gulf_cup_of_nations": "Кубок націй перської затоки",
-    
-    # Північна та Південна Америка
-    "soccer_usa_mls": "США: МЛС",
-    "soccer_mexico_ligamx": "Мексика: Ліга MX",
+    # --- Основні Європейські Ліги (22) ---
+    "soccer_epl": "Англія: Прем'єр-ліга",
+    "soccer_spain_la_liga": "Іспанія: Ла Ліга",
+    "soccer_germany_bundesliga": "Німеччина: Бундесліга",
+    "soccer_italy_serie_a": "Італія: Серія А",
+    "soccer_france_ligue_one": "Франція: Ліга 1",
+    "soccer_england_championship": "Англія: Чемпіоншип",
+    "soccer_england_league1": "Англія: Перша ліга",
+    "soccer_england_league2": "Англія: Друга ліга",
+    "soccer_netherlands_eredivisie": "Нідерланди: Ередивізі",
+    "soccer_portugal_primeira_liga": "Португалія: Прімейра",
+    "soccer_turkey_super_league": "Туреччина: Суперліга",
+    "soccer_belgium_first_div": "Бельгія: Про-ліга",
+    "soccer_scotland_premier_league": "Шотландія: Прем'єр-ліга",
+    "soccer_austria_bundesliga": "Австрія: Бундесліга",
+    "soccer_switzerland_superleague": "Швейцарія: Суперліга",
+    "soccer_denmark_superliga": "Данія: Суперліга",
+    "soccer_norway_eliteserien": "Норвегія: Елітсеріен",
+    "soccer_sweden_allsvenskan": "Швеція: Аллсвенскан",
+    "soccer_poland_ekstraklasa": "Польща: Екстракляса",
+    "soccer_greece_super_league": "Греція: Суперліга",
+    "soccer_spain_segunda_division": "Іспанія: Сегунда",
+    "soccer_germany_bundesliga2": "Німеччина: Друга Бундесліга",
+
+    # --- Нові додані турніри (30) ---
+    "soccer_algeria_ligue_1": "Алжир: Дивізіон 1",
+    "soccer_argentina_primera_division": "Аргентина: Прімера",
     "soccer_argentina_primera_b": "Аргентина: Прімера Б Насьональ",
+    "soccer_brazil_campeonato": "Бразилія: Серія А",
     "soccer_brazil_serie_b": "Бразилія: Серія Б",
     "soccer_paraguay_primera_division": "Парагвай: Прімера",
     "soccer_colombia_categoria_primera_a": "Колумбія: Прімера А",
     "soccer_colombia_categoria_primera_b": "Колумбія: Прімера Б",
-    
-    # Африка та Близький Схід
-    "soccer_algeria_ligue_1": "Алжир: Дивізіон 1",
+    "soccer_chile_camp_nacional": "Чилі: Прімера",
+    "soccer_france_ligue_two": "Франція: Ліга 2",
+    "soccer_france_national": "Франція: Ліга 3 (Насьональ)",
+    "soccer_germany_3_liga": "Німеччина: 3-тя Ліга",
+    "soccer_italy_serie_b": "Італія: Серія Б",
+    "soccer_usa_mls": "США: МЛС",
+    "soccer_mexico_ligamx": "Мексика: Ліга MX",
+    "soccer_netherlands_eerste_divisie": "Нідерланди: Еесте Дивізі",
+    "soccer_korea_k_league_1": "Південна Корея: К-Ліга 1",
+    "soccer_finland_veikkausliiga": "Фінляндія: Вейккаусліга",
+    "soccer_scotland_championship": "Шотландія: Чемпіоншип",
+    "soccer_denmark_1st_division": "Данія: 1-й дивізіон",
+    "soccer_sweden_superettan": "Швеція: Супереттан",
+    "soccer_japan_j_league": "Японія: Джей-ліга",
     "soccer_morocco_pro_league": "Марокко: Ботола Про",
     "soccer_israel_liga_leumit": "Ізраїль: Ліга Леуміт",
-    
-    # Європа (нижчі ліги)
-    "soccer_france_national": "Франція: Ліга 3 (Насьональ)",
-    "soccer_netherlands_eerste_divisie": "Нідерланди: Еесте Дивізі"
+    "soccer_czech_republic_first_league": "Чехія: Перша ліга",
+    "soccer_uefa_nations_league": "Ліга націй УЄФА",
+    "soccer_gulf_cup_of_nations": "Кубок націй перської затоки",
+    "soccer_africa_cup_of_nations": "Кубок африканських націй",
+    "soccer_concacaf_nations_league": "Ліга націй КОНКАКАФ"
 }
-
 # ================================
 # 2. МАТЕМАТИЧНА МОДЕЛЬ
 # ================================
