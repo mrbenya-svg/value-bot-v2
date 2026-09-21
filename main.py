@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def health_check():
-    return "Value Bot V2 is alive!", 200
+    return "Value Filter Bot is alive!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -25,7 +25,7 @@ threading.Thread(target=run_flask, daemon=True).start()
 
 def keep_alive():
     """Фоновий ping через зовнішнє посилання Render для запобігання 'засинанню'"""
-    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-v2.onrender.com")
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot.onrender.com")
     
     time.sleep(15) 
     
@@ -48,6 +48,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
+MIN_ODDS = 1.60
+MAX_ODDS = 3.40
+MIN_EV = 5.0
 MAX_HOURS_AHEAD = 24
 
 LEAGUES_MAP = {
@@ -106,6 +109,7 @@ LEAGUES_MAP = {
     "soccer_africa_cup_of_nations": "Кубок африканських націй",
     "soccer_concacaf_nations_league": "Ліга націй КОНКАКАФ"
 }
+
 # ================================
 # 2. МАТЕМАТИЧНА МОДЕЛЬ
 # ================================
@@ -153,30 +157,11 @@ def format_match_time(iso_time_str: str) -> str:
     except Exception:
         return "Час невідомий"
 
-def check_strategies(is_home: bool, max_odds: float, fair_odds: float, ev: float, xg_h: float, xg_a: float):
-    """
-    Перевірка ставки на відповідність 2-м стратегіям:
-    1. Pre-match 2,0+: max_odds >= 2.0; Fair Odds >= 2.0; EV >= 10%; |xG_h - xG_a| >= 0.3
-    2. Pre-match Home: EV >= 7% i EV < 15%; team == Home (is_home=True); (xg_h - xg_a) >= 1.0
-    """
-    matched_strategies = []
-    abs_xg_diff = abs(xg_h - xg_a)
-
-    # 1. Pre-match 2,0+
-    if max_odds >= 2.0 and fair_odds >= 2.0 and ev >= 10.0 and abs_xg_diff >= 0.3:
-        matched_strategies.append("Pre-match 2.0+")
-
-    # 2. Pre-match Home
-    if is_home and (7.0 <= ev < 15.0) and ((xg_h - xg_a) >= 1.0):
-        matched_strategies.append("Pre-match Home")
-
-    return matched_strategies
-
 # ================================
-# 3. СКАНУВАННЯ ТА ХРОНОЛОГІЧНЕ СОРТУВАННЯ
+# 3. СКАНУВАННЯ З ФІЛЬТРАЦІЄЮ СТРАТЕГІЙ
 # ================================
 def run_scan_and_notify(chat_id):
-    bot.send_message(chat_id, "🔎 <b>Запуск сканера (Новий бот: 17 турнірів + 2 стратегії)...</b>", parse_mode="HTML")
+    bot.send_message(chat_id, f"🔎 <b>Запуск сканера (Бот 2: {len(LEAGUES_MAP)} турнірів + 2 стратегії)...</b>", parse_mode="HTML")
     
     valuable_matches = []
     now_utc = datetime.now(timezone.utc)
@@ -200,7 +185,7 @@ def run_scan_and_notify(chat_id):
                 return
 
             if res_raw.status_code != 200:
-                print(f"Помилка або відсутні лінії у лізі {odds_league_key}: Статус {res_raw.status_code}")
+                print(f"Помилка Odds API ({odds_league_key}): Статус {res_raw.status_code}")
                 continue
 
             odds_res = res_raw.json()
@@ -217,13 +202,15 @@ def run_scan_and_notify(chat_id):
             if commence_str:
                 try:
                     match_dt = datetime.fromisoformat(commence_str.replace("Z", "+00:00"))
-                    if match_dt - now_utc > timedelta(hours=MAX_HOURS_AHEAD):
+                    
+                    # Пропускаємо матчі, які вже розпочалися або за розкладом далі ніж за 24 години
+                    if match_dt <= now_utc or match_dt - now_utc > timedelta(hours=MAX_HOURS_AHEAD):
                         continue
                 except Exception:
                     pass
 
             if not match_dt:
-                match_dt = now_utc + timedelta(days=99)
+                continue
 
             home_team = match['home_team']
             away_team = match['away_team']
@@ -262,47 +249,62 @@ def run_scan_and_notify(chat_id):
             avg_a = sum(away_odds_all) / len(away_odds_all)
 
             model = calculate_full_poisson_model(avg_h, avg_d, avg_a)
-            xg_h, xg_a = model['xg_h'], model['xg_a']
 
-            # --- Перевірка П1 (Господарі) ---
-            ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
-            p1_strat = check_strategies(is_home=True, max_odds=max_h_odds, fair_odds=model['P1']['fair_odds'], ev=ev_p1, xg_h=xg_h, xg_a=xg_a)
-            
-            if p1_strat:
-                strat_str = " | ".join(p1_strat)
-                msg = (
-                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                    f"🏷 <b>Стратегії:</b> <code>{strat_str}</code>\n"
-                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                    f"📅 <b>Час:</b> {match_time_formatted}\n"
-                    f"🏆 <b>Ліга:</b> {league_title}\n"
-                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
-                    f"📌 <b>Ставка:</b> {home_team} (П1)\n"
-                    f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
-                    f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
-                    f"🔥 <b>EV:</b> +{ev_p1}%"
-                )
-                valuable_matches.append({'match_time': match_dt, 'msg': msg})
+            # --- ПЕРЕВІРКА СТРАТЕГІЙ ---
 
-            # --- Перевірка П2 (Гості) ---
-            ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2)
-            p2_strat = check_strategies(is_home=False, max_odds=max_a_odds, fair_odds=model['P2']['fair_odds'], ev=ev_p2, xg_h=xg_h, xg_a=xg_a)
-            
-            if p2_strat:
-                strat_str = " | ".join(p2_strat)
-                msg = (
-                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                    f"🏷 <b>Стратегії:</b> <code>{strat_str}</code>\n"
-                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                    f"📅 <b>Час:</b> {match_time_formatted}\n"
-                    f"🏆 <b>Ліга:</b> {league_title}\n"
-                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
-                    f"📌 <b>Ставка:</b> {away_team} (П2)\n"
-                    f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
-                    f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
-                    f"🔥 <b>EV:</b> +{ev_p2}%"
-                )
-                valuable_matches.append({'match_time': match_dt, 'msg': msg})
+            # 1. Стратегія Pre-match Home (П1, коефіцієнт >= 1.60)
+            if MIN_ODDS <= max_h_odds <= MAX_ODDS:
+                ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
+                if ev_p1 >= MIN_EV:
+                    msg = (
+                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                        f"📜 <b>Стратегія:</b> Pre-match Home\n"
+                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                        f"📅 <b>Час:</b> {match_time_formatted}\n"
+                        f"🏆 <b>Ліга:</b> {league_title}\n"
+                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                        f"📌 <b>Ставка:</b> {home_team} (П1)\n"
+                        f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
+                        f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
+                        f"🔥 <b>EV:</b> +{ev_p1}%"
+                    )
+                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+
+            # 2. Стратегія Pre-match 2.0+ (П1 або П2, коефіцієнт >= 2.00)
+            if max_h_odds >= 2.00 and max_h_odds <= MAX_ODDS:
+                ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
+                if ev_p1 >= MIN_EV:
+                    # Перевіряємо, щоб не дублювати сповіщення, якщо матч пройшов за першою стратегією
+                    msg = (
+                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                        f"📜 <b>Стратегія:</b> Pre-match 2.0+\n"
+                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                        f"📅 <b>Час:</b> {match_time_formatted}\n"
+                        f"🏆 <b>Ліга:</b> {league_title}\n"
+                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                        f"📌 <b>Ставка:</b> {home_team} (П1)\n"
+                        f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
+                        f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
+                        f"🔥 <b>EV:</b> +{ev_p1}%"
+                    )
+                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+
+            if max_a_odds >= 2.00 and max_a_odds <= MAX_ODDS:
+                ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2)
+                if ev_p2 >= MIN_EV:
+                    msg = (
+                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                        f"📜 <b>Стратегії:</b> Pre-match 2.0+\n"
+                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                        f"📅 <b>Час:</b> {match_time_formatted}\n"
+                        f"🏆 <b>Ліга:</b> {league_title}\n"
+                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                        f"📌 <b>Ставка:</b> {away_team} (П2)\n"
+                        f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
+                        f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
+                        f"🔥 <b>EV:</b> +{ev_p2}%"
+                    )
+                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
 
     valuable_matches.sort(key=lambda item: item['match_time'])
 
@@ -310,7 +312,7 @@ def run_scan_and_notify(chat_id):
         bot.send_message(chat_id, val_item['msg'], parse_mode="HTML")
 
     if not valuable_matches:
-        bot.send_message(chat_id, "🏁 Завершено. Валуїв за вашими 2-ма стратегіями на найближчі 24 години не знайдено.")
+        bot.send_message(chat_id, "🏁 Завершено. Валуїв за обраними стратегіями не знайдено.")
     else:
         bot.send_message(chat_id, f"✅ Завершено. Знайдено валуйних сигналів: {len(valuable_matches)}")
 
@@ -319,7 +321,7 @@ def run_scan_and_notify(chat_id):
 # ================================
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "Вітаю! Це новий бот (Value Prematch V2).\nНадішли 'скан' або /scan для запуску.\nКоманда /quota покаже залишок ліміту API.")
+    bot.reply_to(message, "Надішли 'скан' або /scan для запуску сканування за стратегіями.\nКоманда /quota покаже залишок ліміту API.")
 
 @bot.message_handler(commands=['quota'])
 def check_quota(message):
@@ -333,7 +335,7 @@ def check_quota(message):
         used = res.headers.get('x-requests-used', 'Невідомо')
         
         if res.status_code == 200:
-            msg = f"📊 <b>Статус Odds API (Новий ключ):</b>\n\n✅ Використано запитів: <b>{used}</b>\n🔋 Залишилось запитів: <b>{remaining}</b>"
+            msg = f"📊 <b>Статус Odds API:</b>\n\n✅ Використано запитів: <b>{used}</b>\n🔋 Залишилось запитів: <b>{remaining}</b>"
         else:
             msg = f"⚠️ Помилка ключа (Код {res.status_code}):\n{res.text}"
             
@@ -346,7 +348,7 @@ def handle_scan_request(message):
     run_scan_and_notify(message.chat.id)
 
 if __name__ == "__main__":
-    print("🤖 Бот чекає команду 'скан'...")
+    print("🤖 Бот 2 чекає команду 'скан'...")
     
     try:
         bot.remove_webhook()
