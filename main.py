@@ -48,9 +48,6 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-MIN_ODDS = 1.60
-MAX_ODDS = 3.40
-MIN_EV = 5.0
 MAX_HOURS_AHEAD = 24
 
 LEAGUES_MAP = {
@@ -159,7 +156,7 @@ def format_match_time(iso_time_str: str) -> str:
         return "Час невідомий"
 
 # ================================
-# 3. СКАНУВАННЯ З ГРУПУВАННЯМ СТРАТЕГІЙ
+# 3. СКАНУВАННЯ З ОНОВЛЕНИМИ СТРАТЕГІЯМИ
 # ================================
 def run_scan_and_notify(chat_id):
     bot.send_message(chat_id, f"🔎 <b>Запуск сканера ({len(LEAGUES_MAP)} турнірів)...</b>", parse_mode="HTML")
@@ -204,7 +201,6 @@ def run_scan_and_notify(chat_id):
                 try:
                     match_dt = datetime.fromisoformat(commence_str.replace("Z", "+00:00"))
                     
-                    # Жорсткий фільтр часу: ігноруємо матчі в лайві або ті, що стартують > 24 год
                     if match_dt <= now_utc or match_dt - now_utc > timedelta(hours=MAX_HOURS_AHEAD):
                         continue
                 except Exception:
@@ -250,19 +246,23 @@ def run_scan_and_notify(chat_id):
             avg_a = sum(away_odds_all) / len(away_odds_all)
 
             model = calculate_full_poisson_model(avg_h, avg_d, avg_a)
+            
+            xg_h = model['xg_h']
+            xg_a = model['xg_a']
+            xg_diff_abs = abs(xg_h - xg_a)
+            xg_diff_home = xg_h - xg_a
 
-            # --- ГРУПУВАННЯ СТРАТЕГІЙ ДЛЯ ГОСПОДАРІВ (П1) ---
+            # --- ПЕРЕВІРКА ГОСПОДАРІВ (П1) ---
             matched_strategies_p1 = []
-            ev_p1 = 0.0
+            ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2) if model['P1']['fair_odds'] > 0 else -100.0
 
-            if MIN_ODDS <= max_h_odds <= MAX_ODDS:
-                ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
-                if ev_p1 >= MIN_EV:
-                    # Стратегія 1: Pre-match Home (П1, кф від 1.60)
-                    matched_strategies_p1.append("Pre-match Home")
-                    # Стратегія 2: Pre-match 2.0+ (П1, кф від 2.00)
-                    if max_h_odds >= 2.00:
-                        matched_strategies_p1.append("Pre-match 2.0+")
+            # 1. Pre-match 2.0+
+            if max_h_odds >= 2.00 and model['P1']['fair_odds'] >= 2.00 and ev_p1 >= 10.0 and xg_diff_abs >= 0.3:
+                matched_strategies_p1.append("Pre-match 2.0+")
+
+            # 2. Pre-match Home
+            if 7.0 <= ev_p1 < 15.0 and xg_diff_home >= 1.0:
+                matched_strategies_p1.append("Pre-match Home")
 
             if matched_strategies_p1:
                 strat_str = ", ".join(matched_strategies_p1)
@@ -272,7 +272,7 @@ def run_scan_and_notify(chat_id):
                     f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
                     f"📅 <b>Час:</b> {match_time_formatted}\n"
                     f"🏆 <b>Ліга:</b> {league_title}\n"
-                    f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
                     f"📌 <b>Ставка:</b> {home_team} (П1)\n"
                     f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
                     f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
@@ -280,14 +280,13 @@ def run_scan_and_notify(chat_id):
                 )
                 valuable_matches.append({'match_time': match_dt, 'msg': msg})
 
-            # --- ГРУПУВАННЯ СТРАТЕГІЙ ДЛЯ ГОСТЕЙ (П2) ---
+            # --- ПЕРЕВІРКА ГОСТЕЙ (П2) ---
             matched_strategies_p2 = []
-            ev_p2 = 0.0
+            ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2) if model['P2']['fair_odds'] > 0 else -100.0
 
-            if 2.00 <= max_a_odds <= MAX_ODDS:
-                ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2)
-                if ev_p2 >= MIN_EV:
-                    matched_strategies_p2.append("Pre-match 2.0+")
+            # 1. Pre-match 2.0+
+            if max_a_odds >= 2.00 and model['P2']['fair_odds'] >= 2.00 and ev_p2 >= 10.0 and xg_diff_abs >= 0.3:
+                matched_strategies_p2.append("Pre-match 2.0+")
 
             if matched_strategies_p2:
                 strat_str = ", ".join(matched_strategies_p2)
@@ -297,7 +296,7 @@ def run_scan_and_notify(chat_id):
                     f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
                     f"📅 <b>Час:</b> {match_time_formatted}\n"
                     f"🏆 <b>Ліга:</b> {league_title}\n"
-                    f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
+                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
                     f"📌 <b>Ставка:</b> {away_team} (П2)\n"
                     f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
                     f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
