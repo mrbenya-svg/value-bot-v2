@@ -102,10 +102,7 @@ LEAGUES_MAP = {
     "soccer_morocco_pro_league": "Марокко: Ботола Про",
     "soccer_israel_liga_leumit": "Ізраїль: Ліга Леуміт",
     "soccer_czech_republic_first_league": "Чехія: Перша ліга",
-    "soccer_uefa_nations_league": "Ліга націй УЄФА",
-    "soccer_gulf_cup_of_nations": "Кубок націй перської затоки",
-    "soccer_africa_cup_of_nations": "Кубок африканських націй",
-    "soccer_concacaf_nations_league": "Ліга націй КОНКАКАФ"
+    "soccer_uefa_nations_league": "Ліга націй УЄФА"
 }
 
 # ================================
