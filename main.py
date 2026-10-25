@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def health_check():
-    return "Value Filter Bot 1 is alive!", 200
+    return "Value Filter Bot 2 is alive!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -25,13 +25,17 @@ threading.Thread(target=run_flask, daemon=True).start()
 
 def keep_alive():
     """Фоновий ping через зовнішнє посилання Render для запобігання 'засинанню'"""
-    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-1.onrender.com")
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-v2.onrender.com")
+    
     time.sleep(15) 
+    
     while True:
         try:
-            requests.get(render_url, timeout=10)
-        except Exception:
-            pass
+            response = requests.get(render_url, timeout=10)
+            print(f"⏰ [Keep-Alive] External ping sent. Status: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ [Keep-Alive] External ping error: {e}")
+            
         time.sleep(600)
 
 threading.Thread(target=keep_alive, daemon=True).start()
@@ -46,35 +50,61 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 MIN_ODDS = 1.50
 MAX_ODDS = 3.40
-MIN_EV = 5.0
 MAX_HOURS_AHEAD = 24
 
 LEAGUES_MAP = {
-  
-    # --- Основні Європейські Ліги ---
+    # --- Основні Європейські Ліги (22) ---
+    "soccer_epl": "Англія: Прем'єр-ліга",
+    "soccer_spain_la_liga": "Іспанія: Ла Ліга",
+    "soccer_germany_bundesliga": "Німеччина: Бундесліга",
+    "soccer_italy_serie_a": "Італія: Серія А",
+    "soccer_france_ligue_one": "Франція: Ліга 1",
+    "soccer_england_championship": "Англія: Чемпіоншип",
+    "soccer_england_league1": "Англія: Перша ліга",
+    "soccer_england_league2": "Англія: Друга ліга",
+    "soccer_netherlands_eredivisie": "Нідерланди: Ередивізі",
+    "soccer_portugal_primeira_liga": "Португалія: Прімейра",
+    "soccer_turkey_super_league": "Туреччина: Суперліга",
+    "soccer_belgium_first_div": "Бельгія: Про-ліга",
     "soccer_scotland_premier_league": "Шотландія: Прем'єр-ліга",
-    "soccer_ukraine_premier_league": "Україна: Прем'єр-ліга",
-    "soccer_poland_i_liga": "Польща: Дивізіон 1",
-    "soccer_romania_liga_1": "Румунія: Суперліга",
-    "soccer_croatia_hnl": "Хорватія: ХФЛ",
-    "soccer_serbia_superliga": "Сербія: Суперліга",
-    "soccer_hungary_nb_i": "Угорщина: НБ І",
-    "soccer_slovakia_super_liga": "Словаччина: Ніке Ліга",
-    "soccer_slovenia_prva_liga": "Словенія: Перша ліга",
-    "soccer_bulgaria_first_league": "Болгарія: Перша ліга",
-    "soccer_cyprus_first_div": "Кіпр: Ліга Кіпру",
-    "soccer_turkey_tff_first_league": "Туреччина: 1 Ліга",
-    "soccer_norway_first_div": "Норвегія: Обос Ліга",
-    "soccer_spain_primera_rfef": "Іспанія: Прімера КІФФ",
-    "soccer_netherlands_eerste_divisie": "Нідерланди: Еесте Дивізі",
-    "soccer_korea_k_league_1": "Південна Корея: К-Ліга 1",
-    "soccer_czech_republic_first_league": "Чехія: Перша ліга",
-    "soccer_scotland_championship": "Шотландія: Чемпіоншип",
+    "soccer_austria_bundesliga": "Австрія: Бундесліга",
+    "soccer_switzerland_superleague": "Швейцарія: Суперліга",
+    "soccer_denmark_superliga": "Данія: Суперліга",
+    "soccer_norway_eliteserien": "Норвегія: Елітсеріен",
+    "soccer_sweden_allsvenskan": "Швеція: Аллсвенскан",
+    "soccer_poland_ekstraklasa": "Польща: Екстракляса",
+    "soccer_greece_super_league": "Греція: Суперліга",
+    "soccer_spain_segunda_division": "Іспанія: Сегунда",
+    "soccer_germany_bundesliga2": "Німеччина: Друга Бундесліга",
+
+    # --- Додаткові турніри (30) ---
+    "soccer_algeria_ligue_1": "Алжир: Дивізіон 1",
+    "soccer_argentina_primera_division": "Аргентина: Прімера",
     "soccer_argentina_primera_b": "Аргентина: Прімера Б Насьональ",
+    "soccer_brazil_campeonato": "Бразилія: Серія А",
+    "soccer_brazil_serie_b": "Бразилія: Серія Б",
+    "soccer_paraguay_primera_division": "Парагвай: Прімера",
+    "soccer_paraguay_division_intermedia": "Парагвай: Дивізіон Інтермедіа",
+    "soccer_colombia_categoria_primera_a": "Колумбія: Прімера А",
+    "soccer_colombia_categoria_primera_b": "Колумбія: Прімера Б",
+    "soccer_chile_camp_nacional": "Чилі: Прімера",
+    "soccer_france_ligue_two": "Франція: Ліга 2",
     "soccer_france_national": "Франція: Ліга 3 (Насьональ)",
     "soccer_germany_3_liga": "Німеччина: 3-тя Ліга",
+    "soccer_italy_serie_b": "Італія: Серія Б",
+    "soccer_usa_mls": "США: МЛС",
+    "soccer_mexico_ligamx": "Мексика: Ліга MX",
+    "soccer_netherlands_eerste_divisie": "Нідерланди: Еесте Дивізі",
+    "soccer_korea_k_league_1": "Південна Корея: К-Ліга 1",
+    "soccer_finland_veikkausliiga": "Фінляндія: Вейккаусліга",
+    "soccer_scotland_championship": "Шотландія: Чемпіоншип",
     "soccer_denmark_1st_division": "Данія: 1-й дивізіон",
+    "soccer_sweden_superettan": "Швеція: Супереттан",
+    "soccer_japan_j_league": "Японія: Джей-ліга",
+    "soccer_morocco_pro_league": "Марокко: Ботола Про",
     "soccer_israel_liga_leumit": "Ізраїль: Ліга Леуміт",
+    "soccer_czech_republic_first_league": "Чехія: Перша ліга",
+    "soccer_uefa_nations_league": "Ліга націй УЄФА"
 }
 
 # ================================
@@ -125,7 +155,7 @@ def format_match_time(iso_time_str: str) -> str:
         return "Час невідомий"
 
 # ================================
-# 3. СКАНУВАННЯ З ФІЛЬТРАЦІЄЮ МАТЧІВ
+# 3. СКАНУВАННЯ З ОНОВЛЕНИМИ СТРАТЕГІЯМИ
 # ================================
 def run_scan_and_notify(chat_id):
     bot.send_message(chat_id, f"🔎 <b>Запуск сканера ({len(LEAGUES_MAP)} турнірів)...</b>", parse_mode="HTML")
@@ -215,40 +245,63 @@ def run_scan_and_notify(chat_id):
             avg_a = sum(away_odds_all) / len(away_odds_all)
 
             model = calculate_full_poisson_model(avg_h, avg_d, avg_a)
+            
+            xg_h = model['xg_h']
+            xg_a = model['xg_a']
+            xg_diff_abs = abs(xg_h - xg_a)
+            xg_diff_home = xg_h - xg_a
 
-            # Перевірка П1
-            if MIN_ODDS <= max_h_odds <= MAX_ODDS:
-                ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2)
-                if ev_p1 >= MIN_EV:
-                    msg = (
-                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                        f"📅 <b>Час:</b> {match_time_formatted}\n"
-                        f"🏆 <b>Ліга:</b> {league_title}\n"
-                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
-                        f"📌 <b>Ставка:</b> {home_team} (П1)\n"
-                        f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
-                        f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
-                        f"🔥 <b>EV:</b> +{ev_p1}%"
-                    )
-                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+            # --- ПЕРЕВІРКА ГОСПОДАРІВ (П1) ---
+            matched_strategies_p1 = []
+            ev_p1 = round(((max_h_odds / model['P1']['fair_odds']) - 1) * 100, 2) if model['P1']['fair_odds'] > 0 else -100.0
 
-            # Перевірка П2
-            if MIN_ODDS <= max_a_odds <= MAX_ODDS:
-                ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2)
-                if ev_p2 >= MIN_EV:
-                    msg = (
-                        f"🎯 <b>VALUE BET FOUND</b>\n\n"
-                        f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
-                        f"📅 <b>Час:</b> {match_time_formatted}\n"
-                        f"🏆 <b>Ліга:</b> {league_title}\n"
-                        f"📊 <b>Оціночний xG:</b> {model['xg_h']} - {model['xg_a']}\n"
-                        f"📌 <b>Ставка:</b> {away_team} (П2)\n"
-                        f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
-                        f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
-                        f"🔥 <b>EV:</b> +{ev_p2}%"
-                    )
-                    valuable_matches.append({'match_time': match_dt, 'msg': msg})
+            # 1. Pre-match 2.0+
+            if max_h_odds >= 2.00 and model['P1']['fair_odds'] >= 2.00 and ev_p1 >= 10.0 and xg_diff_abs >= 0.3:
+                matched_strategies_p1.append("Pre-match 2.0+")
+
+            # 2. Pre-match Home
+            if 7.0 <= ev_p1 < 15.0 and xg_diff_home >= 1.0:
+                matched_strategies_p1.append("Pre-match Home")
+
+            if matched_strategies_p1:
+                strat_str = ", ".join(matched_strategies_p1)
+                msg = (
+                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                    f"📜 <b>Стратегії:</b> {strat_str}\n"
+                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                    f"📅 <b>Час:</b> {match_time_formatted}\n"
+                    f"🏆 <b>Ліга:</b> {league_title}\n"
+                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
+                    f"📌 <b>Ставка:</b> {home_team} (П1)\n"
+                    f"📈 <b>Макс. кф БК:</b> {max_h_odds} ({best_bk_h})\n"
+                    f"⚖️ <b>Fair Odds:</b> {model['P1']['fair_odds']} ({model['P1']['prob']}%)\n"
+                    f"🔥 <b>EV:</b> +{ev_p1}%"
+                )
+                valuable_matches.append({'match_time': match_dt, 'msg': msg})
+
+            # --- ПЕРЕВІРКА ГОСТЕЙ (П2) ---
+            matched_strategies_p2 = []
+            ev_p2 = round(((max_a_odds / model['P2']['fair_odds']) - 1) * 100, 2) if model['P2']['fair_odds'] > 0 else -100.0
+
+            # 1. Pre-match 2.0+
+            if max_a_odds >= 2.00 and model['P2']['fair_odds'] >= 2.00 and ev_p2 >= 10.0 and xg_diff_abs >= 0.3:
+                matched_strategies_p2.append("Pre-match 2.0+")
+
+            if matched_strategies_p2:
+                strat_str = ", ".join(matched_strategies_p2)
+                msg = (
+                    f"🎯 <b>VALUE BET FOUND</b>\n\n"
+                    f"📜 <b>Стратегії:</b> {strat_str}\n"
+                    f"⚽️ <b>Матч:</b> {home_team} vs {away_team}\n"
+                    f"📅 <b>Час:</b> {match_time_formatted}\n"
+                    f"🏆 <b>Ліга:</b> {league_title}\n"
+                    f"📊 <b>Оціночний xG:</b> {xg_h} - {xg_a}\n"
+                    f"📌 <b>Ставка:</b> {away_team} (П2)\n"
+                    f"📈 <b>Макс. кф БК:</b> {max_a_odds} ({best_bk_a})\n"
+                    f"⚖️ <b>Fair Odds:</b> {model['P2']['fair_odds']} ({model['P2']['prob']}%)\n"
+                    f"🔥 <b>EV:</b> +{ev_p2}%"
+                )
+                valuable_matches.append({'match_time': match_dt, 'msg': msg})
 
     valuable_matches.sort(key=lambda item: item['match_time'])
 
@@ -292,7 +345,7 @@ def handle_scan_request(message):
     run_scan_and_notify(message.chat.id)
 
 if __name__ == "__main__":
-    print("🤖 Бот 1 чекає команду 'скан'...")
+    print("🤖 Бот 2 чекає команду 'скан'...")
     
     try:
         bot.remove_webhook()
