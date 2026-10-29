@@ -25,7 +25,7 @@ threading.Thread(target=run_flask, daemon=True).start()
 
 def keep_alive():
     """Фоновий ping через зовнішнє посилання Render для запобігання 'засинанню'"""
-    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-1.onrender.com")
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "https://value-bot-2.onrender.com")
     time.sleep(15) 
     while True:
         try:
